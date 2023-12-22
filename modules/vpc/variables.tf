@@ -12,9 +12,9 @@ variable "vpc_cidr" {
 #   //default     = "test"
 # }
 
-# variable "nat_count" {
-# }
+variable "nat_count" {
+}
 
-# variable "public_subnet_id" {
-#   type = list(object)
-# }
+variable "public_subnet_id" {
+  type = list(string)
+}
