@@ -55,18 +55,12 @@ module "private_route_tb" {
 #}
 
 module "security_group" {
-  source = "../modules/security-groups"
+  source = "./modules/security-groups"
   vpc_id = module.vpc.vpc_id
 }
 
-module "acm" {
-  source            = "../modules/acm"
-  domain_name       = var.domain_name
-  alternative_name  = var.alternative_name
-}
-
 module "application_load_balancer" {
-  source            = "../modules/alb"
+  source            = "./modules/alb"
   project_name      = module.vpc.project_name
   alb_security_group_id   = module.security_group.alb_security_group_id
   public_subnet_ids = module.vpc.public_subnet_ids
@@ -75,7 +69,7 @@ module "application_load_balancer" {
 }
 
 module "acm" {
-  source            = "../modules/acm"
+  source            = "./modules/acm"
   domain_name       = var.domain_name
   alternative_name  = var.alternative_name
 }
