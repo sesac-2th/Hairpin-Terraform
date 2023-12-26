@@ -50,8 +50,13 @@ module "private_route_tb" {
     }
 }
 
-module "collabnix_application_load_balancer" {
-  source = "./modules/application_load_balancer"
+#module "collabnix_application_load_balancer" {
+#  source = "./modules/application_load_balancer"
+#}
+
+module "security_group" {
+  source = "../modules/security-groups"
+  vpc_id = module.vpc.vpc_id
 }
 
 module "acm" {
@@ -63,7 +68,14 @@ module "acm" {
 module "application_load_balancer" {
   source            = "../modules/alb"
   project_name      = module.vpc.project_name
-  alb_security_group_id   = 26.40
-  public_subnet_ids
-  
+  alb_security_group_id   = module.security_group.alb_security_group_id
+  public_subnet_ids = module.vpc.public_subnet_ids
+  vpc_id            = module.vpc.vpc_id
+  certificate_arn   = module.acm.certificate_arn
+}
+
+module "acm" {
+  source            = "../modules/acm"
+  domain_name       = var.domain_name
+  alternative_name  = var.alternative_name
 }
