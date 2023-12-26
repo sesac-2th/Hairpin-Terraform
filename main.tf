@@ -2,8 +2,7 @@ module "vpc" {
   source           = "./modules/vpc"
   vpc_name         = "hairpin-project-vpc"
   vpc_cidr         = "10.0.0.0/24"
-  nat_count        = 2
-  public_subnet_id = flatten(module.subnet[*].public_subnet_ids)
+  public_subnet_id = flatten(module.subnet[0].public_subnet_ids)[0]
 }
 
 module "subnet" {
@@ -19,11 +18,11 @@ module "subnet" {
 }
 
 module "public_route_tb" {
-  source    = "./modules/routetb"
-  vpc_id    = module.vpc.vpc_id
-  count     = length(flatten(module.subnet[*].public_subnet_ids))
-  rt_name   = flatten(module.subnet[*].public_subnet_names)[count.index]
-  subnet_id = flatten(module.subnet[*].public_subnet_ids)[count.index]
+  source               = "./modules/routetb"
+  vpc_id               = module.vpc.vpc_id
+  rt_association_count = length(flatten(module.subnet[*].public_subnet_ids))
+  rt_name              = "public-hairpin"
+  subnet_id            = flatten(module.subnet[*].public_subnet_ids)
 
   routings = {
     igw = {
@@ -34,15 +33,15 @@ module "public_route_tb" {
 }
 
 module "private_route_tb" {
-  source    = "./modules/routetb"
-  vpc_id    = module.vpc.vpc_id
-  count     = length(flatten(module.subnet[*].private_subnet_ids))
-  rt_name   = flatten(module.subnet[*].private_subnet_names)[count.index]
-  subnet_id = flatten(module.subnet[*].private_subnet_ids)[count.index]
+  source               = "./modules/routetb"
+  vpc_id               = module.vpc.vpc_id
+  rt_association_count = length(flatten(module.subnet[*].private_subnet_ids))
+  rt_name              = "private-hairpin"
+  subnet_id            = flatten(module.subnet[*].private_subnet_ids)
   routings = {
     nat = {
       dst_cidr = "0.0.0.0/0",
-      dst_id   = flatten(module.subnet[*].private_subnet_az)[count.index] == data.aws_availability_zones.available.names[0] ? module.vpc.nat_id[0] : module.vpc.nat_id[1]
+      dst_id   = module.vpc.nat_id
     }
   }
 }
@@ -50,8 +49,8 @@ module "private_route_tb" {
 module "eks" {
   source                         = "terraform-aws-modules/eks/aws"
   version                        = "~> 19.0"
-  cluster_name                   = "my-cluster"
-  cluster_version                = "1.27"
+  cluster_name                   = "hairpin-cluster"
+  cluster_version                = "1.28"
   cluster_endpoint_public_access = true
   cluster_addons = {
     coredns = {
@@ -65,15 +64,21 @@ module "eks" {
     }
   }
 
-  vpc_id     = module.vpc.vpc_id
-  subnet_ids = flatten(module.subnet[*].private_subnet_ids)
+  vpc_id                   = module.vpc.vpc_id
+  subnet_ids               = local.subnet_eks_nodegroup_ids
+  control_plane_subnet_ids = local.subnet_eks_cluster_ids
   # EKS Managed Node Group(s)
   eks_managed_node_groups = {
-    green = {
+    nodegroup = {
       min_size       = 2
-      max_size       = 3
+      max_size       = 4
       desired_size   = 2
       instance_types = ["t3.medium"]
     }
   }
+
+  //  remote_access = {
+  //    ec2_ssh_key               = module.key_pair.key_pair_name
+  //    source_security_group_ids = [aws_security_group.remote_access.id]
+  //  }
 }

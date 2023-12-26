@@ -7,14 +7,6 @@ variable "vpc_cidr" {
   //default     = "10.0.0.0/16"
 }
 
-# variable "alltag" {
-#   description = "company name"
-#   //default     = "test"
-# }
-
-variable "nat_count" {
-}
-
 variable "public_subnet_id" {
-  type = list(string)
+  type = string
 }
