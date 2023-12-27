@@ -1,16 +1,16 @@
 variable "vpc_id" {
-  
+
 }
 
-# variable "rt_count" {
-# }
+variable "rt_association_count" {
+}
 
 variable "rt_name" {
-    type = string
+  type = string
 }
 
 variable "subnet_id" {
-  type = string
+  type = list(string)
 }
 
 variable "routings" {
