@@ -9,19 +9,22 @@ variable "subnet_az" {
 }
 
 variable "private_subnet_name" {
-    default = ["eks", "rds"]
+  default = ["eks", "rds"]
 }
 
 variable "public_subnet_cidr" {
-    type = list(string)
+  type = list(string)
 }
 
 variable "private_subnet_cidr" {
-    type = list(string)
+  type = list(string)
 }
 
 variable "public_subnet_count" {
 }
 
 variable "private_subnet_count" {
+}
+
+variable "cluster_name" {
 }

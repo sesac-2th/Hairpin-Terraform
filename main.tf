@@ -15,6 +15,7 @@ module "subnet" {
   public_subnet_cidr   = flatten([for i in range(local.public_subnet_count) : [cidrsubnet(module.vpc.vpc_cidr, 3, count.index * 3)]])
   private_subnet_cidr  = flatten([for i in range(local.private_subnet_count) : [cidrsubnet(module.vpc.vpc_cidr, 3, count.index * 3 + i + 1)]])
   subnet_az            = data.aws_availability_zones.available.names[count.index]
+  cluster_name         = "hairpin-cluster"
 }
 
 module "public_route_tb" {
