@@ -2,7 +2,7 @@ module "vpc" {
   source           = "./modules/vpc"
   vpc_name         = "hairpin-project-vpc"
   vpc_cidr         = "10.0.0.0/24"
-  public_subnet_id = flatten(module.subnet[0].public_subnet_ids)[0]
+  public_subnet_id = flatten(module.subnet[0].public_subnet_ids)[0] # nat 생성할 public subnet
 }
 
 module "subnet" {
@@ -15,7 +15,7 @@ module "subnet" {
   public_subnet_cidr   = flatten([for i in range(local.public_subnet_count) : [cidrsubnet(module.vpc.vpc_cidr, 3, count.index * 3)]])
   private_subnet_cidr  = flatten([for i in range(local.private_subnet_count) : [cidrsubnet(module.vpc.vpc_cidr, 3, count.index * 3 + i + 1)]])
   subnet_az            = data.aws_availability_zones.available.names[count.index]
-  cluster_name         = "hairpin-cluster"
+  cluster_name         = local.cluster_name
 }
 
 module "public_route_tb" {
@@ -50,7 +50,7 @@ module "private_route_tb" {
 module "eks" {
   source                         = "terraform-aws-modules/eks/aws"
   version                        = "~> 19.0"
-  cluster_name                   = "hairpin-cluster"
+  cluster_name                   = local.cluster_name
   cluster_version                = "1.28"
   cluster_endpoint_public_access = true
   cluster_addons = {

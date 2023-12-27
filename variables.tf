@@ -74,4 +74,6 @@ locals {
   subnet_eks_cluster_ids   = data.aws_subnets.subnet_eks_cluster_ids.ids
   subnet_eks_nodegroup_ids = data.aws_subnets.private_subnet_eks_nodegroup_ids.ids
   private_subnet_rds_ids   = data.aws_subnets.private_subnet_rds_ids.ids
+
+  cluster_name = "hairpin-cluster"
 }
