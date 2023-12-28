@@ -1,0 +1,8 @@
+cloudWatchLogs:
+  enabled: true
+  region: ${region}
+  logGroupName: ${cw-log-group}
+  logGroupTemplate: ${cw-log-group}/$kubernetes['namespace_name']
+  logStreamTemplate: $kubernetes['pod_name'].$kubernetes['container_name']
+  autoCreateGroup: true
+  logRetentionDays: 90

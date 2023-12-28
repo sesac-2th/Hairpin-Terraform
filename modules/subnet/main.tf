@@ -18,5 +18,6 @@ resource "aws_subnet" "private-subnet" {
   tags = {
     Name                                        = "private-${var.private_subnet_name[count.index]}-${var.subnet_az}"
     "kubernetes.io/cluster/${var.cluster_name}" = var.private_subnet_name[count.index] == "eks" ? "shared" : null
+    "kubernetes.io/role/internal-elb"           = 1
   }
 }

@@ -1,0 +1,6 @@
+  clusterName: ${clusterName}
+  region: ${region}
+  vpcId: ${vpcId}
+  serviceAccount:
+    create: false
+    name: "aws-load-balancer-controller"

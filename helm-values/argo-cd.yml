@@ -1,0 +1,24 @@
+configs:
+  params:
+    server.insecure: true # Disable TLS
+redis-ha:
+  enabled: true
+controller:
+  replicas: 1
+server:
+  replicas: 2
+  ingress:
+    enabled: true
+    https: false # Disable TLS
+    ingressClassName: alb
+    annotations:
+      alb.ingress.kubernetes.io/backend-protocol: HTTP
+      # alb.ingress.kubernetes.io/backend-protocol: HTTPS
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      # alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+repoServer:
+  replicas: 2
+applicationSet:
+  replicas: 2
