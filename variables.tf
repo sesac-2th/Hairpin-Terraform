@@ -2,6 +2,15 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+data "aws_iam_policy" "efs_csi" {
+  name = "AmazonEFSCSIDriverPolicy"
+}
+
+data "aws_iam_policy" "cw_agent" {
+  # name = "CloudWatchAgentServerPolicy" # Not included PutRetentionPolicy Permission
+  name = "CloudWatchFullAccess" # Included PutRetentionPolicy Permission
+}
+
 data "aws_subnets" "public_subnet_ids" {
   depends_on = [module.subnet]
   filter {
@@ -65,6 +74,7 @@ data "aws_subnets" "private_subnet_rds_ids" {
 }
 
 locals {
+  region = "us-east-1"
   # 가용영역 당 서브넷 개수
   public_subnet_count  = 1
   private_subnet_count = 2
@@ -75,5 +85,8 @@ locals {
   subnet_eks_nodegroup_ids = data.aws_subnets.private_subnet_eks_nodegroup_ids.ids
   private_subnet_rds_ids   = data.aws_subnets.private_subnet_rds_ids.ids
 
-  cluster_name = "hairpin-cluster"
+  cluster_name                       = "hairpin-cluster"
+  lb_controller_iam_role_name        = "hairpin-eks-aws-lb-role"
+  lb_controller_service_account_name = "hairpin-aws-lb-svc-account"
+  efs_name                           = "jenkins-efs-pv"
 }
