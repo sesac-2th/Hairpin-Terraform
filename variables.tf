@@ -76,4 +76,6 @@ locals {
   private_subnet_rds_ids   = data.aws_subnets.private_subnet_rds_ids.ids
 
   cluster_name = "hairpin-cluster"
+  efs_name     = "eks-efs-hairpin"
+  region_name  = "us-east-2"
 }

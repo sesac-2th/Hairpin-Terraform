@@ -28,9 +28,6 @@ module "efs" {
     "two" = {
       subnet_id = module.vpc.private_subnets[1]
     }
-    "three" = {
-      subnet_id = module.vpc.private_subnets[2]
-    }
   }
 
   # Security Group
