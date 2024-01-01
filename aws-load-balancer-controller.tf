@@ -47,7 +47,7 @@ resource "helm_release" "aws-load-balancer-controller" {
   values = [
     templatefile("${path.module}/helm-values/aws-load-balancer-controller.yml", {
       clusterName = module.eks.cluster_name,
-      region      = "us-east-2",
+      region      = local.region_name,
       vpcId       = module.vpc.vpc_id
       }
     )

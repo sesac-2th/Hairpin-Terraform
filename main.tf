@@ -204,16 +204,117 @@ resource "kubernetes_storage_class" "efs-sc" {
   }
 }
 
-#######################################
+############################
 ### RDS
-#######################################
+############################
 
-module "rds" {
-  source = "./modules/rds"
-  depends_on = [
-    module.eks,
-    module.efs
-  ]
-
-  vpc_id      = module.vpc.vpc_id
+resource "aws_db_instance" "rds" {
+  allocated_storage    = 20                 // 할당할 스토리지 용량
+  engine               = "mysql"            // DB 엔진
+  engine_version       = "8.0.35"           // DB 엔진 버전
+  instance_class       = "db.t3.medium"     // 인스턴스 타입
+  db_name              = var.db_name        // 기본으로 생성할 db이름
+  username             = var.db_user_name
+  password             = var.db_password
+  parameter_group_name = "default.mysql8.0" // DB 파라메터
+  skip_final_snapshot  = true               // 인스턴스 제거 시 최종 스냅샷을 만들지 않고 제거
+  db_subnet_group_name = aws_db_subnet_group.rds.name
+  identifier           = "hairpin-rds"
+  vpc_security_group_ids  = [aws_security_group.rds.id]
+  storage_encrypted = true
+  enabled_cloudwatch_logs_exports = ["audit", "error", "slowquery"]
+  backup_retention_period = "7"
+  auto_minor_version_upgrade = false
 }
+
+# RDS에서 사용할 서브넷그룹을 private subnet을 이용하여 생성
+resource "aws_db_subnet_group" "rds" {
+  name       = "hairpin-group"
+  #subnet_ids = [for index, subnet in flatten([module.vpc.private_rds_subnets]) : subnet.id]
+  subnet_ids = flatten(module.subnet[*].private_subnet_ids)
+  tags = {
+    Name = "hairpin-rds"
+  }
+}
+
+# RDS에서 사용할 보안그룹 생성
+resource "aws_security_group" "rds" {
+  name        = "hairpin-rds"
+  description = "hairpin-rds"
+  vpc_id      = module.vpc.vpc_id
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    #ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = {
+    Name = "hairpin-rds"
+  }
+}
+
+# bastion과 eks클러스터 내부에서 3306으로 접근 가능하도록 rule설정
+resource "aws_security_group_rule" "cluster-name-rds" {
+  description       = "hairpin-rds allow from cluster"
+  from_port         = 3306
+  protocol          = "tcp"
+  security_group_id = aws_security_group.rds.id
+  source_security_group_id = aws_security_group.rds.id
+  to_port           = 3306
+  type              = "ingress"
+}
+
+variable "db_user_name" {
+    description = "The username for the database"
+    default = "user"
+    type = string
+    sensitive = true
+}
+
+# DB password는 직접 변경하는 걸로
+variable "db_password" {
+    description = "The password for the database"
+    default = "password"
+    type = string
+    sensitive = true
+}
+
+variable "db_name" {
+    description = "The name to use for the database"
+    type = string
+    default = "hairpindb"
+}
+
+#output "rds_endpoint" {
+#  value = module.rds_instance.rds_endpoint
+#}
+
+
+####################################
+### route 53
+####################################
+
+# get hosted zone details
+# terraform aws data hosted zone
+data "aws_route53_zone" "hosted_zone" {
+  name = var.domain_name
+}
+
+# create a record set in route 53
+# terraform aws route 53 record
+/*
+resource "aws_route53_record" "site_domain" {
+  zone_id = data.aws_route53_zone.hosted_zone.zone_id
+  name    = var.record_name
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.application_load_balancer.dns_name
+    zone_id                = aws_lb.application_load_balancer.zone_id
+    evaluate_target_health = true
+  }
+}
+*/

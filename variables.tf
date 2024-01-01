@@ -79,3 +79,19 @@ locals {
   efs_name     = "eks-efs-hairpin"
   region_name  = "us-east-2"
 }
+
+##################################
+### route 53
+##################################
+
+variable "domain_name" {
+  default       = "hairpin.today"
+  description   = "domain name"
+  type          = string
+}
+
+variable "record_name" {
+  default       = "www"
+  description   = "sub domain name"
+  type          = string
+}
