@@ -13,6 +13,19 @@ resource "kubernetes_service_account" "lb_sa" {
   }
 }
 
+resource "kubernetes_service_account" "external-dns" {
+  metadata {
+    name      = var.external_dns_sc_name
+    namespace = var.namespace
+    labels = {
+      "app.kubernetes.io/name" = var.external_dns_sc_name
+    }
+    annotations = {
+      "eks.amazonaws.com/role-arn" = var.external_dns_role_arn
+    }
+  }
+}
+
 # resource "kubernetes_annotations" "efs_csi_sa" {
 #   api_version = "v1"
 #   kind        = "ServiceAccount"

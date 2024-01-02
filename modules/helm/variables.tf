@@ -19,6 +19,18 @@ variable "vpc_id" {
 variable "helm_jenkins_name" {
 }
 
-variable "path" {
+variable "helm_argocd_name" {
+
+}
+
+variable "eks_external_dns_service_account_name" {
+
+}
+
+variable "external_dns_deploy_region" {
+
+}
+
+variable "helm_external_dns_name" {
 
 }

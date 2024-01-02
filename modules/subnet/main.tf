@@ -20,4 +20,3 @@ resource "aws_subnet" "private-subnet" {
     "kubernetes.io/cluster/${var.cluster_name}" = var.private_subnet_name[count.index] == "eks" ? "shared" : null
   }
 }
-

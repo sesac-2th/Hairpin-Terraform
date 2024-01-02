@@ -2,6 +2,26 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+data "aws_ami" "ami_id" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm*"]
+  }
+}
+
+# === user data 생성 -> ec2 init 파일 이라고 생각하면 됨 ===
+data "template_file" "bastion_user_data" {
+  template = file("./bastion_init.sh")
+}
+
+data "aws_route53_zone" "route53_hosting_zone" {
+  name         = "hairpin.today"
+  private_zone = false
+}
+
 data "aws_iam_policy" "efs_csi" {
   name = "AmazonEFSCSIDriverPolicy"
 }
@@ -74,7 +94,7 @@ data "aws_subnets" "private_subnet_rds_ids" {
 }
 
 locals {
-  region = "us-east-1"
+  region = "ap-northeast-1"
   # 가용영역 당 서브넷 개수
   public_subnet_count  = 1
   private_subnet_count = 2
