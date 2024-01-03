@@ -218,7 +218,7 @@ module "efs_storage_class" {
 
 module "rds_security_group" {
   depends_on                        = [module.eks]
-  source                            = "../security-group"
+  source                            = "./modules/security-group"
   vpc_id                            = data.aws_vpc.vpc_id.id
   allow_bastion_ingress_cidr_blocks = null
   allow_rds_ingress_sg_id           = module.eks.node_security_group_id
@@ -256,7 +256,7 @@ module "rds" {
 
   multi_az               = true
   db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name
-  vpc_security_group_ids = ["${module.rds_security_group.rds_sg_id}"]
+  vpc_security_group_ids = ["${module.rds_security_group.sg_id}"]
 
   allow_major_version_upgrade = true
   # parameter_group_name        = "default-mysql"
