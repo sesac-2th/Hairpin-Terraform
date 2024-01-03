@@ -1,6 +1,6 @@
 resource "aws_network_interface_sg_attachment" "sg_attachment" {
   depends_on           = [module.eks]
-  count                = 2
+  count                = length(local.eks_security_group_ids)
   security_group_id    = local.eks_security_group_ids[count.index]
   network_interface_id = data.aws_instance.bastion.network_interface_id
 }
@@ -70,7 +70,8 @@ module "eks_addon" {
     module.eks,
     module.eks_service_account,
     module.efs,
-    module.external_dns_irsa_role
+    module.external_dns_irsa_role,
+    aws_network_interface_sg_attachment.sg_attachment
   ]
 
   namespace = "kube-system"

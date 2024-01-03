@@ -104,7 +104,7 @@ locals {
   subnet_eks_nodegroup_ids = data.aws_subnets.private_subnet_eks_nodegroup_ids.ids
   private_subnet_rds_ids   = data.aws_subnets.private_subnet_rds_ids.ids
 
-  eks_security_group_ids = [module.eks.node_security_group_id, module.eks.cluster_security_group_id]
+  eks_security_group_ids = [module.eks.node_security_group_id, module.eks.cluster_security_group_id, module.eks.cluster_primary_security_group_id]
 
   cluster_name                       = "hairpin-cluster"
   lb_controller_iam_role_name        = "hairpin-eks-aws-lb-role"

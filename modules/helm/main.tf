@@ -35,6 +35,7 @@ resource "helm_release" "external-dns" {
       "serviceAccount.name"   = var.eks_external_dns_service_account_name
       "region"                = var.external_dns_deploy_region
       "vpcId"                 = var.vpc_id
+      "policy"                = "sync"
     }
     content {
       name  = set.key
