@@ -24,10 +24,9 @@ data "aws_vpc" "vpc_id" {
 }
 
 data "aws_subnets" "public_subnet_ids" {
-  depends_on = [module.subnet]
   filter {
     name   = "vpc-id"
-    values = [module.vpc.vpc_id]
+    values = ["${data.aws_vpc.vpc_id.id}"]
   }
   filter {
     name   = "tag:Name"
@@ -36,10 +35,9 @@ data "aws_subnets" "public_subnet_ids" {
 }
 
 data "aws_subnets" "private_subnet_ids" {
-  depends_on = [module.subnet]
   filter {
     name   = "vpc-id"
-    values = [module.vpc.vpc_id]
+    values = ["${data.aws_vpc.vpc_id.id}"]
   }
   filter {
     name   = "tag:Name"
@@ -48,10 +46,9 @@ data "aws_subnets" "private_subnet_ids" {
 }
 
 data "aws_subnets" "subnet_eks_cluster_ids" {
-  depends_on = [module.subnet]
   filter {
     name   = "vpc-id"
-    values = [module.vpc.vpc_id]
+    values = ["${data.aws_vpc.vpc_id.id}"]
   }
 
   filter {
@@ -61,10 +58,9 @@ data "aws_subnets" "subnet_eks_cluster_ids" {
 }
 
 data "aws_subnets" "private_subnet_eks_nodegroup_ids" {
-  depends_on = [module.subnet]
   filter {
     name   = "vpc-id"
-    values = [module.vpc.vpc_id]
+    values = ["${data.aws_vpc.vpc_id.id}"]
   }
 
   filter {
@@ -74,10 +70,9 @@ data "aws_subnets" "private_subnet_eks_nodegroup_ids" {
 }
 
 data "aws_subnets" "private_subnet_rds_ids" {
-  depends_on = [module.subnet]
   filter {
     name   = "vpc-id"
-    values = [module.vpc.vpc_id]
+    values = ["${data.aws_vpc.vpc_id.id}"]
   }
   filter {
     name   = "tag:Name"
