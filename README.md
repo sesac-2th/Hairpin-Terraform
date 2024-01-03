@@ -9,6 +9,8 @@ eks cluster 에 public access 불가로 같은 VPC 내에 bastion host 를 생�
 
 `terrafrom init`
 
+`terraform plan`
+
 `terraform apply [--auto-approve]` # [optional] -> _yes_ 자동 승인
 
 </br>
