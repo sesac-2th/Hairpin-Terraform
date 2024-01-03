@@ -23,7 +23,7 @@ module "eks" {
   }
 
 
-  vpc_id                   = module.vpc.vpc_id
+  vpc_id                   = data.aws_vpc.vpc_id.id
   subnet_ids               = local.subnet_eks_nodegroup_ids
   control_plane_subnet_ids = local.subnet_eks_cluster_ids
   # EKS Managed Node Group(s)
