@@ -2,7 +2,7 @@ resource "aws_network_interface_sg_attachment" "sg_attachment" {
   depends_on           = [module.eks]
   count                = 2
   security_group_id    = local.eks_security_group_ids[count.index]
-  network_interface_id = data.aws_instance.bastion.primary_network_interface_id
+  network_interface_id = data.aws_instance.bastion.network_interface_id
 }
 
 # ==== eks 설정 ====
