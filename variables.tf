@@ -2,21 +2,6 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
-data "aws_ami" "ami_id" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm*"]
-  }
-}
-
-# === user data 생성 -> ec2 init 파일 이라고 생각하면 됨 ===
-data "template_file" "bastion_user_data" {
-  template = file("./bastion_init.sh")
-}
-
 data "aws_route53_zone" "route53_hosting_zone" {
   name         = "hairpin.today"
   private_zone = false
@@ -29,6 +14,13 @@ data "aws_iam_policy" "efs_csi" {
 data "aws_iam_policy" "cw_agent" {
   # name = "CloudWatchAgentServerPolicy" # Not included PutRetentionPolicy Permission
   name = "CloudWatchFullAccess" # Included PutRetentionPolicy Permission
+}
+
+data "aws_vpc" "vpc_id" {
+  filter {
+    name   = "tag:Name"
+    values = ["hairpin-*"]
+  }
 }
 
 data "aws_subnets" "public_subnet_ids" {

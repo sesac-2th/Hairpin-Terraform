@@ -9,3 +9,19 @@ variable "allow_rds_ingress_sg_id" {
 variable "allow_bastion_ingress_cidr_blocks" {
   type = list(string)
 }
+
+variable "sg_name" {
+
+}
+
+variable "port" {
+
+}
+
+variable "protocol" {
+
+}
+
+variable "description" {
+
+}

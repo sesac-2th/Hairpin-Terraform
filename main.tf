@@ -1,64 +1,3 @@
-# ==== base network 설정 ====
-module "vpc" {
-  source           = "./modules/vpc"
-  vpc_name         = "hairpin-project-vpc"
-  vpc_cidr         = "10.0.0.0/24"
-  public_subnet_id = flatten(module.subnet[0].public_subnet_ids)[0] # nat 생성할 public subnet
-}
-
-module "subnet" {
-  source               = "./modules/subnet"
-  count                = 2
-  vpc_id               = module.vpc.vpc_id
-  vpc_cidr             = module.vpc.vpc_cidr
-  public_subnet_count  = local.public_subnet_count
-  private_subnet_count = local.private_subnet_count
-  public_subnet_cidr   = flatten([for i in range(local.public_subnet_count) : [cidrsubnet(module.vpc.vpc_cidr, 3, count.index * 3)]])
-  private_subnet_cidr  = flatten([for i in range(local.private_subnet_count) : [cidrsubnet(module.vpc.vpc_cidr, 3, count.index * 3 + i + 1)]])
-  subnet_az            = data.aws_availability_zones.available.names[count.index]
-  cluster_name         = local.cluster_name
-}
-
-module "public_route_tb" {
-  source               = "./modules/routetb"
-  vpc_id               = module.vpc.vpc_id
-  rt_association_count = length(flatten(module.subnet[*].public_subnet_ids))
-  rt_name              = "public-hairpin"
-  subnet_id            = flatten(module.subnet[*].public_subnet_ids)
-
-  routings = {
-    igw = {
-      dst_cidr = "0.0.0.0/0",
-      dst_id   = module.vpc.igw_id
-    }
-  }
-}
-
-module "private_route_tb" {
-  source               = "./modules/routetb"
-  vpc_id               = module.vpc.vpc_id
-  rt_association_count = length(flatten(module.subnet[*].private_subnet_ids))
-  rt_name              = "private-hairpin"
-  subnet_id            = flatten(module.subnet[*].private_subnet_ids)
-  routings = {
-    nat = {
-      dst_cidr = "0.0.0.0/0",
-      dst_id   = module.vpc.nat_id
-    }
-  }
-}
-
-module "security_group" {
-  depends_on                        = [module.eks]
-  source                            = "./modules/security-group"
-  vpc_id                            = module.vpc.vpc_id
-  allow_rds_ingress_sg_id           = ["${module.eks.node_security_group_id}"]
-  allow_bastion_ingress_cidr_blocks = ["0.0.0.0/0"]
-}
-
-# ==== base network 설정 끝 ====
-
-
 # ==== eks 설정 ====
 module "eks" {
   source                         = "terraform-aws-modules/eks/aws"
@@ -140,7 +79,7 @@ module "eks_addon" {
 
 
   # === set for external-dns ===
-  eks_external_dns_service_account_name = module.eks_service_account.external_dns_sc_name
+  eks_external_dns_service_account_name = module.eks_service_account.eks_external_dns_service_account_name
   external_dns_deploy_region            = local.region
 
   # ==== set 공통 ====
@@ -166,7 +105,7 @@ module "eks_service_account" {
 }
 
 
-# # ==== eks 에서 사용할 aws 서비스 role 생성 ====
+# ==== eks 에서 사용할 aws 서비스 role 생성 ====
 
 module "lb_role" {
   source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
@@ -196,7 +135,6 @@ module "efs_role" {
 }
 
 module "external_dns_irsa_role" {
-  depends_on = [module.eks]
 
   source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
 
@@ -239,7 +177,7 @@ module "efs" {
   create_security_group      = true
   security_group_name        = "${local.efs_name}-sg"
   security_group_description = "EFS security group for ${module.eks.cluster_name} EKS Cluster"
-  security_group_vpc_id      = module.vpc.vpc_id
+  security_group_vpc_id      = data.aws_vpc.vpc_id.id
   security_group_rules = {
     vpc = {
       description = "NFS ingress from VPC private subnets"
@@ -277,13 +215,26 @@ module "efs_storage_class" {
 
 
 #  ==== rds 설정 ====
+
+module "rds_security_group" {
+  depends_on                        = [module.eks]
+  source                            = "../security-group"
+  vpc_id                            = data.aws_vpc.vpc_id.id
+  allow_bastion_ingress_cidr_blocks = null
+  allow_rds_ingress_sg_id           = module.eks.node_security_group_id
+  sg_name                           = "rds-sg"
+  port                              = 3306
+  protocol                          = "tcp"
+  description                       = "Terraform rds-sg"
+}
+
 resource "aws_db_subnet_group" "rds_subnet_group" {
   name       = "hairpin-subent-group"
   subnet_ids = local.private_subnet_rds_ids
 }
 
 module "rds" {
-  depends_on = [module.security_group]
+  depends_on = [module.rds_security_group.sg_id]
   source     = "terraform-aws-modules/rds/aws"
 
   identifier = "hairpin-rds"
@@ -305,10 +256,10 @@ module "rds" {
 
   multi_az               = true
   db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name
-  vpc_security_group_ids = ["${module.security_group.rds_sg_id}"]
+  vpc_security_group_ids = ["${module.rds_security_group.rds_sg_id}"]
 
   allow_major_version_upgrade = true
-  parameter_group_name        = "default.mysql8.0"
+  # parameter_group_name        = "default-mysql"
 
   maintenance_window              = "Mon:00:00-Mon:03:00"
   backup_window                   = "03:00-06:00"
@@ -333,17 +284,6 @@ module "rds" {
       value = "utf8mb4"
     }
   ]
-}
-
-# ==== bastion ec2 설정 ====
-
-module "bastion_ec2" {
-  source       = "./modules/ec2"
-  ami_id       = data.aws_ami.ami_id.id # amazon-linux-2
-  subnet_id    = local.public_subnet_ids[0]
-  ec2_sg_ids   = ["${module.security_group.bastion_sg_id}"]
-  keypair_name = "hairpin-bastion"
-  user_data    = data.template_file.bastion_user_data.rendered
 }
 
 # ==== S3 ====

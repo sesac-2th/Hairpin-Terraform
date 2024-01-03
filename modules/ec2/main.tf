@@ -1,11 +1,11 @@
 resource "aws_instance" "ec2" {
-  ami                         = var.ami_id
+  ami                         = data.aws_ami.ami_id.id
   instance_type               = "t2.small"
-  subnet_id                   = var.subnet_id
+  subnet_id                   = local.public_subnet_ids[0]
   key_name                    = aws_key_pair.ec2_keypair.key_name
-  vpc_security_group_ids      = var.ec2_sg_ids
+  vpc_security_group_ids      = ["${data.aws_security_group.sg.id}"]
   associate_public_ip_address = true
-  user_data                   = var.user_data
+  user_data                   = data.template_file.bastion_user_data.rendered
 
   tags = {
     Name = "hairpin-bastion"
@@ -20,7 +20,7 @@ resource "tls_private_key" "ec2_private_key" {
 }
 
 resource "aws_key_pair" "ec2_keypair" {
-  key_name   = var.keypair_name
+  key_name   = "hairpin-key"
   public_key = tls_private_key.ec2_private_key.public_key_openssh
 }
 
