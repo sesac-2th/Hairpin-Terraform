@@ -47,6 +47,10 @@ module "private_route_tb" {
   }
 }
 
+#########################################
+### EKS
+#########################################
+
 module "eks" {
   source                         = "terraform-aws-modules/eks/aws"
   version                        = "~> 19.0"
@@ -110,17 +114,13 @@ module "eks" {
       }
     }
   }
-
-  //  remote_access = {
-  //    ec2_ssh_key               = module.key_pair.key_pair_name
-  //    source_security_group_ids = [aws_security_group.remote_access.id]
-  //  }
   manage_aws_auth_configmap = true
 }
 
-#######################################
-### SeSAC (IAM_POLICY)
-#######################################
+
+############################################
+### IAM_POLICY (SeSAC)
+############################################
 
 data "aws_iam_policy" "cw_agent" {
   # name = "CloudWatchAgentServerPolicy" # Not included PutRetentionPolicy Permission
@@ -131,9 +131,9 @@ data "aws_iam_policy" "efs_csi" {
   name = "AmazonEFSCSIDriverPolicy"
 }
 
-#######################################
-### EFS
-#######################################
+############################################
+### EFS (SeSAC)
+############################################
 
 # EFS CSI Driver
 # https://docs.aws.amazon.com/ko_kr/eks/latest/userguide/efs-csi.html
@@ -175,7 +175,7 @@ module "efs" {
   security_group_rules = {
     vpc = {
       description = "NFS ingress from VPC private subnets"
-      cidr_blocks = ["0.0.0.0/0"]
+      cidr_blocks = module.eks.node_security_group_id
     }
   }
 
@@ -208,113 +208,61 @@ resource "kubernetes_storage_class" "efs-sc" {
 ### RDS
 ############################
 
-resource "aws_db_instance" "rds" {
-  allocated_storage    = 20                 // 할당할 스토리지 용량
-  engine               = "mysql"            // DB 엔진
-  engine_version       = "8.0.35"           // DB 엔진 버전
-  instance_class       = "db.t3.medium"     // 인스턴스 타입
-  db_name              = var.db_name        // 기본으로 생성할 db이름
-  username             = var.db_user_name
-  password             = var.db_password
-  parameter_group_name = "default.mysql8.0" // DB 파라메터
-  skip_final_snapshot  = true               // 인스턴스 제거 시 최종 스냅샷을 만들지 않고 제거
-  db_subnet_group_name = aws_db_subnet_group.rds.name
-  identifier           = "hairpin-rds"
-  vpc_security_group_ids  = [aws_security_group.rds.id]
-  storage_encrypted = true
-  enabled_cloudwatch_logs_exports = ["audit", "error", "slowquery"]
-  backup_retention_period = "7"
-  auto_minor_version_upgrade = false
+module "hairpin-rds" {
+  source = "./modules/rds"
+  db_subnet_group_name   = "rds-subnet-group"
+  subnet_ids             = local.private_subnet_rds_ids
+  allocated_storage      = 20
+  storage_type           = "gp2"
+  engine                 = "mysql"
+  engine_version         = "8.0.35"
+  instance_class         = "db.t3.medium"
+  name                   = "rds"
+  username               = "admin"
+  password               = "password"
+  security_group_ids     = [aws_security_group.rds-sg.id]
+  security_group_name    = "hairpin-rds-sg"
+  security_group_description = "Security group for RDS in us-east-2"
+  vpc_id                 = module.vpc.vpc_id
+  allow_rds_ingress_sg_id    = ["${module.eks.node_security_group_id}"]
 }
 
-# RDS에서 사용할 서브넷그룹을 private subnet을 이용하여 생성
-resource "aws_db_subnet_group" "rds" {
-  name       = "hairpin-group"
-  #subnet_ids = [for index, subnet in flatten([module.vpc.private_rds_subnets]) : subnet.id]
-  subnet_ids = flatten(module.subnet[*].private_subnet_ids)
-  tags = {
-    Name = "hairpin-rds"
-  }
-}
-
-# RDS에서 사용할 보안그룹 생성
-resource "aws_security_group" "rds" {
-  name        = "hairpin-rds"
-  description = "hairpin-rds"
+resource "aws_security_group" "rds-sg" {
+  name        = "${local.cluster_name}-rds-sg"
+  description = "${local.cluster_name}-rds-sg"
   vpc_id      = module.vpc.vpc_id
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-    #ipv6_cidr_blocks = ["::/0"]
-  }
-
   tags = {
-    Name = "hairpin-rds"
+    Name = "${local.cluster_name}-rds-SG"
   }
 }
 
-# bastion과 eks클러스터 내부에서 3306으로 접근 가능하도록 rule설정
-resource "aws_security_group_rule" "cluster-name-rds" {
-  description       = "hairpin-rds allow from cluster"
+resource "aws_security_group_rule" "sg-cluster-to-rds" {
+  description       = "${local.cluster_name}-rds allow from EKS cluster"
   from_port         = 3306
   protocol          = "tcp"
-  security_group_id = aws_security_group.rds.id
-  source_security_group_id = aws_security_group.rds.id
+  security_group_id = aws_security_group.rds-sg.id
+  source_security_group_id = module.eks.node_security_group_id
   to_port           = 3306
   type              = "ingress"
 }
 
-variable "db_user_name" {
-    description = "The username for the database"
-    default = "user"
-    type = string
-    sensitive = true
+#############################################
+### Bastion Host EC2
+#############################################
+
+module "bastion_ec2" {
+  depends_on   = [module.bastion_sg]
+  source       = "./modules/bastion"
+  ami_id       = data.aws_ami.ami_id.id                    # amazon-linux-2
+  subnet_id    = local.public_subnet_ids[0]
+  vpc_id       = module.vpc.vpc_id
+  sg_ids   = ["${module.bastion_sg.bastion_sg_id}"]
+  keypair_name = "${local.cluster_name}_BastionHost"
+  user_data    = data.template_file.bastion_user_data.rendered
 }
 
-# DB password는 직접 변경하는 걸로
-variable "db_password" {
-    description = "The password for the database"
-    default = "password"
-    type = string
-    sensitive = true
+module "bastion_sg" {
+  depends_on            = [module.eks]
+  source                = "./modules/bastion_security_group"
+  vpc_id                = module.vpc.vpc_id
 }
-
-variable "db_name" {
-    description = "The name to use for the database"
-    type = string
-    default = "hairpindb"
-}
-
-#output "rds_endpoint" {
-#  value = module.rds_instance.rds_endpoint
-#}
-
-
-####################################
-### route 53
-####################################
-
-# get hosted zone details
-# terraform aws data hosted zone
-data "aws_route53_zone" "hosted_zone" {
-  name = var.domain_name
-}
-
-# create a record set in route 53
-# terraform aws route 53 record
-/*
-resource "aws_route53_record" "site_domain" {
-  zone_id = data.aws_route53_zone.hosted_zone.zone_id
-  name    = var.record_name
-  type    = "A"
-
-  alias {
-    name                   = aws_lb.application_load_balancer.dns_name
-    zone_id                = aws_lb.application_load_balancer.zone_id
-    evaluate_target_health = true
-  }
-}
-*/

@@ -75,23 +75,30 @@ locals {
   subnet_eks_nodegroup_ids = data.aws_subnets.private_subnet_eks_nodegroup_ids.ids
   private_subnet_rds_ids   = data.aws_subnets.private_subnet_rds_ids.ids
 
-  cluster_name = "hairpin-cluster"
+  cluster_name = "hairpin"
   efs_name     = "eks-efs-hairpin"
   region_name  = "us-east-2"
 }
 
-##################################
-### route 53
-##################################
-
-variable "domain_name" {
-  default       = "hairpin.today"
-  description   = "domain name"
-  type          = string
+variable "key_name" {
+  default = "Hairpin_1.pem"
 }
 
-variable "record_name" {
-  default       = "www"
-  description   = "sub domain name"
-  type          = string
+##################################
+### Bastion Host
+##################################
+
+data "aws_ami" "ami_id" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm*"]
+  }
+}
+
+# User Data
+data "template_file" "bastion_user_data" {
+  template = file("./modules/bastion.sh")
 }
