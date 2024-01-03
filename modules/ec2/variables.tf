@@ -1,49 +1,22 @@
-locals {
-  region            = "ap-northeast-1"
-  public_subnet_ids = data.aws_subnets.public_subnet_ids.ids
+variable "ami_id" {
 }
 
-data "aws_ami" "ami_id" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm*"]
-  }
+variable "ec2_sg_ids" {
+  type = list(string)
 }
 
-data "aws_vpc" "vpc_id" {
-  filter {
-    name   = "tag:Name"
-    values = ["hairpin-*"]
-  }
+variable "ec2_name" {
+  type = string
 }
 
-data "aws_subnets" "public_subnet_ids" {
-  filter {
-    name   = "vpc-id"
-    values = ["${data.aws_vpc.vpc_id.id}"]
-  }
-  filter {
-    name   = "tag:Name"
-    values = ["public-*"]
-  }
+variable "user_data" {
+
 }
 
-data "aws_security_group" "sg" {
-  filter {
-    name   = "vpc-id"
-    values = ["${data.aws_vpc.vpc_id.id}"]
-  }
-  filter {
-    name   = "tag:Name"
-    values = ["bastion-*"]
-  }
+variable "subnet_id" {
+
 }
 
-# === user data 생성 -> ec2 init 파일 이라고 생각하면 됨 ===
-data "template_file" "bastion_user_data" {
-  template = file("./bastion_init.sh")
-}
+variable "keyfile_path" {
 
+}

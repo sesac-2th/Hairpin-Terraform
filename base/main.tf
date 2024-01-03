@@ -1,13 +1,13 @@
 # ==== base network 설정 ====
 module "vpc" {
-  source           = "../vpc"
+  source           = "../modules/vpc"
   vpc_name         = "hairpin-project-vpc"
   vpc_cidr         = "10.0.0.0/24"
   public_subnet_id = flatten(module.subnet[0].public_subnet_ids)[0] # nat 생성할 public subnet
 }
 
 module "subnet" {
-  source               = "../subnet"
+  source               = "../modules/subnet"
   count                = 2
   vpc_id               = module.vpc.vpc_id
   vpc_cidr             = module.vpc.vpc_cidr
@@ -20,7 +20,7 @@ module "subnet" {
 }
 
 module "public_route_tb" {
-  source               = "../routetb"
+  source               = "../modules/routetb"
   vpc_id               = module.vpc.vpc_id
   rt_association_count = length(flatten(module.subnet[*].public_subnet_ids))
   rt_name              = "public-hairpin"
@@ -35,7 +35,7 @@ module "public_route_tb" {
 }
 
 module "private_route_tb" {
-  source               = "../routetb"
+  source               = "../modules/routetb"
   vpc_id               = module.vpc.vpc_id
   rt_association_count = length(flatten(module.subnet[*].private_subnet_ids))
   rt_name              = "private-hairpin"
@@ -49,7 +49,7 @@ module "private_route_tb" {
 }
 
 module "security_group" {
-  source                            = "../security-group"
+  source                            = "../modules/security-group"
   vpc_id                            = module.vpc.vpc_id
   allow_bastion_ingress_cidr_blocks = ["0.0.0.0/0"]
   allow_rds_ingress_sg_id           = null

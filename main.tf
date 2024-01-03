@@ -1,3 +1,10 @@
+resource "aws_network_interface_sg_attachment" "sg_attachment" {
+  depends_on           = [module.eks]
+  count                = 2
+  security_group_id    = local.eks_security_group_ids[count.index]
+  network_interface_id = data.aws_instance.bastion.primary_network_interface_id
+}
+
 # ==== eks 설정 ====
 module "eks" {
   source                         = "terraform-aws-modules/eks/aws"
@@ -220,7 +227,7 @@ module "rds_security_group" {
   source                            = "./modules/security-group"
   vpc_id                            = data.aws_vpc.vpc_id.id
   allow_bastion_ingress_cidr_blocks = null
-  allow_rds_ingress_sg_id           = module.eks.node_security_group_id
+  allow_rds_ingress_sg_id           = ["${module.eks.node_security_group_id}"]
   sg_name                           = "rds-sg"
   port                              = 3306
   protocol                          = "tcp"

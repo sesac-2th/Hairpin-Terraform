@@ -80,6 +80,18 @@ data "aws_subnets" "private_subnet_rds_ids" {
   }
 }
 
+data "aws_instance" "bastion" {
+
+  filter {
+    name   = "vpc-id"
+    values = ["${data.aws_vpc.vpc_id.id}"]
+  }
+  filter {
+    name   = "tag:Name"
+    values = ["hairpin-*"]
+  }
+}
+
 locals {
   region = "ap-northeast-1"
   # 가용영역 당 서브넷 개수
@@ -91,6 +103,8 @@ locals {
   subnet_eks_cluster_ids   = data.aws_subnets.subnet_eks_cluster_ids.ids
   subnet_eks_nodegroup_ids = data.aws_subnets.private_subnet_eks_nodegroup_ids.ids
   private_subnet_rds_ids   = data.aws_subnets.private_subnet_rds_ids.ids
+
+  eks_security_group_ids = [module.eks.node_security_group_id, module.eks.cluster_security_group_id]
 
   cluster_name                       = "hairpin-cluster"
   lb_controller_iam_role_name        = "hairpin-eks-aws-lb-role"
