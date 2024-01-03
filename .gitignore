@@ -1,6 +1,10 @@
 # Created by https://www.toptal.com/developers/gitignore/api/terraform
 # Edit at https://www.toptal.com/developers/gitignore?templates=terraform
 
+### keypair ###
+**/keypair/*
+*.pem
+
 ### Terraform ###
 # Local .terraform directories
 **/.terraform/*
