@@ -84,8 +84,7 @@ module "eks_addon" {
 
   # ==== set 공통 ====
   eks_cluster_name = local.cluster_name
-  vpc_id           = module.vpc.vpc_id
-
+  vpc_id           = data.aws_vpc.vpc_id.id
 }
 
 
