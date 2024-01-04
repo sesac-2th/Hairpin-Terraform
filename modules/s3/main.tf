@@ -14,7 +14,7 @@ resource "aws_s3_bucket_ownership_controls" "s3_ownership_control" {
   }
 }
 
-resource "aws_s3_bucket_policy" "allow_access_from_another_account" {
+resource "aws_s3_bucket_policy" "allow_access_from_another" {
   bucket = aws_s3_bucket.bucket.id
   policy = data.aws_iam_policy_document.PolicyForCloudFrontPrivateContent.json
 }
