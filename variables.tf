@@ -93,7 +93,7 @@ data "aws_instance" "bastion" {
 }
 
 locals {
-  region = "ap-northeast-2"
+  region = "ap-northeast-1"
   # 가용영역 당 서브넷 개수
   public_subnet_count  = 1
   private_subnet_count = 2
