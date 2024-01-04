@@ -1,3 +1,4 @@
+
 resource "aws_network_interface_sg_attachment" "sg_attachment" {
   depends_on           = [module.eks]
   count                = length(local.eks_security_group_ids)
@@ -302,6 +303,7 @@ module "rds" {
 module "s3" {
   source      = "./modules/s3"
   bucket_name = "hairpin-bucket"
+  rule        = "BucketOwnerPreferred"
 }
 
 # ==== ACM ====
