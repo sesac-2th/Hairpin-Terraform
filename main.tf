@@ -1,73 +1,17 @@
-module "vpc" {
-  source           = "./modules/vpc"
-  vpc_name         = "hairpin-project-vpc"
-  vpc_cidr         = "10.0.0.0/24"
-  public_subnet_id = flatten(module.subnet[0].public_subnet_ids)[0] # nat 생성할 public subnet
+resource "aws_network_interface_sg_attachment" "sg_attachment" {
+  depends_on           = [module.eks]
+  count                = length(local.eks_security_group_ids)
+  security_group_id    = local.eks_security_group_ids[count.index]
+  network_interface_id = data.aws_instance.bastion.network_interface_id
 }
 
-module "subnet" {
-  source               = "./modules/subnet"
-  count                = 2
-  vpc_id               = module.vpc.vpc_id
-  vpc_cidr             = module.vpc.vpc_cidr
-  public_subnet_count  = local.public_subnet_count
-  private_subnet_count = local.private_subnet_count
-  public_subnet_cidr   = flatten([for i in range(local.public_subnet_count) : [cidrsubnet(module.vpc.vpc_cidr, 3, count.index * 3)]])
-  private_subnet_cidr  = flatten([for i in range(local.private_subnet_count) : [cidrsubnet(module.vpc.vpc_cidr, 3, count.index * 3 + i + 1)]])
-  subnet_az            = data.aws_availability_zones.available.names[count.index]
-  cluster_name         = local.cluster_name
-}
-
-module "public_route_tb" {
-  source               = "./modules/routetb"
-  vpc_id               = module.vpc.vpc_id
-  rt_association_count = length(flatten(module.subnet[*].public_subnet_ids))
-  rt_name              = "public-hairpin"
-  subnet_id            = flatten(module.subnet[*].public_subnet_ids)
-
-  routings = {
-    igw = {
-      dst_cidr = "0.0.0.0/0",
-      dst_id   = module.vpc.igw_id
-    }
-  }
-}
-
-module "private_route_tb" {
-  source               = "./modules/routetb"
-  vpc_id               = module.vpc.vpc_id
-  rt_association_count = length(flatten(module.subnet[*].private_subnet_ids))
-  rt_name              = "private-hairpin"
-  subnet_id            = flatten(module.subnet[*].private_subnet_ids)
-  routings = {
-    nat = {
-      dst_cidr = "0.0.0.0/0",
-      dst_id   = module.vpc.nat_id
-    }
-  }
-}
-
-#########################################
-### EKS
-#########################################
-
+# ==== eks 설정 ====
 module "eks" {
   source                         = "terraform-aws-modules/eks/aws"
   version                        = "~> 19.0"
   cluster_name                   = local.cluster_name
   cluster_version                = "1.28"
-  cluster_endpoint_public_access = true
-
-  cluster_enabled_log_types = [
-    "api",
-    "audit",
-    "authenticator",
-    "controllerManager",
-    "scheduler"
-  ]
-  # 보관 기간은 default가 무제한이지만 비용 절감을 위해 90일로 설정
-  cloudwatch_log_group_retention_in_days = 90
-
+  cluster_endpoint_public_access = false
   cluster_addons = {
     coredns = {
       most_recent = true
@@ -78,26 +22,25 @@ module "eks" {
     vpc-cni = {
       most_recent = true
     }
+
     aws-efs-csi-driver = {
-      most_recent = true
+      most_recent              = true
+      service_account_role_arn = module.efs_role.iam_role_arn
     }
   }
 
-  vpc_id                   = module.vpc.vpc_id
+
+  vpc_id                   = data.aws_vpc.vpc_id.id
   subnet_ids               = local.subnet_eks_nodegroup_ids
   control_plane_subnet_ids = local.subnet_eks_cluster_ids
+  # EKS Managed Node Group(s)
 
   eks_managed_node_group_defaults = {
-    ami_type       = "AL2_x86_64"
-    instance_types = ["t3.medium"]
-
     iam_role_additional_policies = {
       AmazonEFSCSIDriverPolicy    = data.aws_iam_policy.efs_csi.arn
       CloudWatchAgentServerPolicy = data.aws_iam_policy.cw_agent.arn
     }
   }
-
-  # EKS Managed Node Group(s)
   eks_managed_node_groups = {
     nodegroup = {
       min_size       = 2
@@ -106,7 +49,6 @@ module "eks" {
       instance_types = ["t3.medium"]
       capacity_type  = "ON_DEMAND"
 
-      # AutoScaler를 위해 tag를 붙임
       tags = {
         //For Cluster-Autoscaler Addon
         "k8s.io/cluster-autoscaler/enabled" : "true"
@@ -114,36 +56,107 @@ module "eks" {
       }
     }
   }
-  manage_aws_auth_configmap = true
+
+  //  remote_access = {
+  //    ec2_ssh_key               = module.key_pair.key_pair_name
+  //    source_security_group_ids = [aws_security_group.remote_access.id]
+  //  }
+}
+
+# ==== eks helm addon 서비스 생성 ====
+module "eks_addon" {
+  source = "./modules/helm"
+  depends_on = [
+    module.eks,
+    module.eks_service_account,
+    module.efs,
+    module.external_dns_irsa_role,
+    aws_network_interface_sg_attachment.sg_attachment
+  ]
+
+  namespace = "kube-system"
+
+  helm_lb_name           = "aws-load-balancer-controller"
+  helm_external_dns_name = "external-dns"
+  helm_jenkins_name      = "jenkins"
+  helm_argocd_name       = "argocd"
+
+  # === set for lb ===
+  eks_lb_service_account_name = module.eks_service_account.eks_lb_service_account_name
+  lb_deploy_region            = local.region
+
+
+  # === set for external-dns ===
+  eks_external_dns_service_account_name = module.eks_service_account.eks_external_dns_service_account_name
+  external_dns_deploy_region            = local.region
+
+  # ==== set 공통 ====
+  eks_cluster_name = local.cluster_name
+  vpc_id           = data.aws_vpc.vpc_id.id
 }
 
 
-############################################
-### IAM_POLICY (SeSAC)
-############################################
+# ==== eks 용 service account 생성 ====
 
-data "aws_iam_policy" "cw_agent" {
-  # name = "CloudWatchAgentServerPolicy" # Not included PutRetentionPolicy Permission
-  name = "CloudWatchFullAccess" # Included PutRetentionPolicy Permission
+module "eks_service_account" {
+  depends_on              = [module.eks]
+  source                  = "./modules/eks/service-account"
+  lb_service_account_name = "aws-load-balancer-controller"
+  namespace               = "kube-system"
+  component               = "controller"
+  lb_role_arn             = module.lb_role.iam_role_arn
+  external_dns_sc_name    = "external-dns"
+  external_dns_role_arn   = module.external_dns_irsa_role.iam_role_arn
+  # efs_service_account_name = ["efs-csi-node-sa", "efs-csi-controller-sa"]
+  # efs_role_arn             = module.efs_role.iam_role_arn
 }
 
-data "aws_iam_policy" "efs_csi" {
-  name = "AmazonEFSCSIDriverPolicy"
+
+# ==== eks 에서 사용할 aws 서비스 role 생성 ====
+
+module "lb_role" {
+  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+
+  role_name                              = "hairpin-lb_controller_iam_role"
+  attach_load_balancer_controller_policy = true
+
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:aws-load-balancer-controller"]
+    }
+  }
 }
 
-############################################
-### EFS (SeSAC)
-############################################
+module "efs_role" {
+  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
 
-# EFS CSI Driver
-# https://docs.aws.amazon.com/ko_kr/eks/latest/userguide/efs-csi.html
+  role_name             = "hairpin-efs-csi-role"
+  attach_efs_csi_policy = true
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:efs-csi-controller-sa", "kube-system:efs-csi-node-sa"]
+    }
+  }
+}
 
-# Create an Amazon EFS file system for Amazon EKS
-# https://github.com/kubernetes-sigs/aws-efs-csi-driver/blob/master/docs/efs-create-filesystem.md
+module "external_dns_irsa_role" {
 
-# EFS Dynamic Provisioning
-# https://github.com/kubernetes-sigs/aws-efs-csi-driver/blob/master/examples/kubernetes/dynamic_provisioning/README.md#edit-storageclass
+  source = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
 
+  role_name                  = "external-dns"
+  attach_external_dns_policy = true
+
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["kube-system:external-dns"]
+    }
+  }
+}
+
+# ==== efs 생성  ====
 module "efs" {
   source  = "terraform-aws-modules/efs/aws"
   version = "~> 1.2"
@@ -159,10 +172,10 @@ module "efs" {
 
   # Mount targets
   mount_targets = {
-    "one" = {
+    "${data.aws_availability_zones.available.names[0]}" = {
       subnet_id = local.subnet_eks_nodegroup_ids[0]
     }
-    "two" = {
+    "${data.aws_availability_zones.available.names[1]}" = {
       subnet_id = local.subnet_eks_nodegroup_ids[1]
     }
   }
@@ -171,11 +184,12 @@ module "efs" {
   create_security_group      = true
   security_group_name        = "${local.efs_name}-sg"
   security_group_description = "EFS security group for ${module.eks.cluster_name} EKS Cluster"
-  security_group_vpc_id      = module.vpc.vpc_id
+  security_group_vpc_id      = data.aws_vpc.vpc_id.id
   security_group_rules = {
     vpc = {
       description = "NFS ingress from VPC private subnets"
-      cidr_blocks = module.eks.node_security_group_id
+      # cidr_blocks = module.vpc.private_subnets_cidr_blocks
+      source_security_group_id = module.eks.node_security_group_id
     }
   }
 
@@ -185,84 +199,120 @@ module "efs" {
   # Replication configuration
   create_replication_configuration = false
   replication_configuration_destination = {
-    region = local.region_name
+    region = local.region
   }
 }
 
-# StorageClass for EFS
-resource "kubernetes_storage_class" "efs-sc" {
-  metadata {
-    name = "efs-sc"
-  }
-  storage_provisioner = "efs.csi.aws.com"
-  reclaim_policy      = "Delete"
+# ==== eks helm jenkins 위한 storage class 생성 ====
+
+module "efs_storage_class" {
+  source = "./modules/eks/storageclass"
+  depends_on = [
+    module.efs,
+    aws_network_interface_sg_attachment.sg_attachment
+  ]
+  efs_name = "jenkins-efs-pv"
+
+  reclaim_policy      = "Retain"
   volume_binding_mode = "WaitForFirstConsumer"
-  parameters = {
-    provisioningMode = "efs-ap"
-    fileSystemId     = module.efs.id
-    directoryPerms   = "700"
+  # == parameters ==
+  provisioningMode = "efs-ap"
+  efs_id           = module.efs.id
+  directoryPerms   = "700"
+}
+
+
+#  ==== rds 설정 ====
+
+module "rds_security_group" {
+  depends_on                        = [module.eks]
+  source                            = "./modules/security-group"
+  vpc_id                            = data.aws_vpc.vpc_id.id
+  allow_bastion_ingress_cidr_blocks = null
+  allow_rds_ingress_sg_id           = ["${module.eks.node_security_group_id}"]
+  sg_name                           = "rds-sg"
+  port                              = 3306
+  protocol                          = "tcp"
+  description                       = "Terraform rds-sg"
+}
+
+resource "aws_db_subnet_group" "rds_subnet_group" {
+  name       = "hairpin-subent-group"
+  subnet_ids = local.private_subnet_rds_ids
+}
+
+module "rds" {
+  depends_on = [module.rds_security_group.sg_id]
+  source     = "terraform-aws-modules/rds/aws"
+
+  identifier = "hairpin-rds"
+
+  # All available versions: http://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_MySQL.html#MySQL.Concepts.VersionMgmt
+  engine               = "mysql"
+  engine_version       = "8.0.35"
+  family               = "mysql8.0" # DB parameter group
+  major_engine_version = "8.0"      # DB option group
+  instance_class       = "db.t3.medium"
+
+  allocated_storage     = 20
+  max_allocated_storage = 100
+
+  db_name  = "hairpin"
+  username = "admin"
+  password = "adminadmin"
+  port     = 3306
+
+  multi_az               = true
+  db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.name
+  vpc_security_group_ids = ["${module.rds_security_group.sg_id}"]
+
+  allow_major_version_upgrade = true
+  # parameter_group_name        = "default-mysql"
+
+  maintenance_window              = "Mon:00:00-Mon:03:00"
+  backup_window                   = "03:00-06:00"
+  enabled_cloudwatch_logs_exports = ["general"]
+  create_cloudwatch_log_group     = true
+
+  skip_final_snapshot = true
+  deletion_protection = false
+
+  performance_insights_enabled = false
+  # performance_insights_retention_period = 7
+  # create_monitoring_role                = true
+  # monitoring_interval                   = 60
+
+  parameters = [
+    {
+      name  = "character_set_client"
+      value = "utf8mb4"
+    },
+    {
+      name  = "character_set_server"
+      value = "utf8mb4"
+    }
+  ]
+}
+
+# ==== S3 ====
+module "s3" {
+  source      = "./modules/s3"
+  bucket_name = "hairpin-bucket"
+}
+
+# ==== ACM ====
+module "cdn-acm" { # cloudfront 를 위한 인증서 -> 글로벌 서비스라 버지니아에 생성해야함 꼭!!!!
+  providers = {
+    aws = aws.virginia
   }
+  source            = "./modules/acm"
+  domain_name       = "hairpin.today"
+  alternative_name  = ["*.hairpin.today"]
+  route53_host_zone = data.aws_route53_zone.route53_hosting_zone.zone_id
 }
 
-############################
-### RDS
-############################
-
-module "hairpin-rds" {
-  source = "./modules/rds"
-  db_subnet_group_name   = "rds-subnet-group"
-  subnet_ids             = local.private_subnet_rds_ids
-  allocated_storage      = 20
-  storage_type           = "gp2"
-  engine                 = "mysql"
-  engine_version         = "8.0.35"
-  instance_class         = "db.t3.medium"
-  name                   = "rds"
-  username               = "admin"
-  password               = "password"
-  security_group_ids     = [aws_security_group.rds-sg.id]
-  security_group_name    = "hairpin-rds-sg"
-  security_group_description = "Security group for RDS in us-east-2"
-  vpc_id                 = module.vpc.vpc_id
-  allow_rds_ingress_sg_id    = ["${module.eks.node_security_group_id}"]
-}
-
-resource "aws_security_group" "rds-sg" {
-  name        = "${local.cluster_name}-rds-sg"
-  description = "${local.cluster_name}-rds-sg"
-  vpc_id      = module.vpc.vpc_id
-  tags = {
-    Name = "${local.cluster_name}-rds-SG"
-  }
-}
-
-resource "aws_security_group_rule" "sg-cluster-to-rds" {
-  description       = "${local.cluster_name}-rds allow from EKS cluster"
-  from_port         = 3306
-  protocol          = "tcp"
-  security_group_id = aws_security_group.rds-sg.id
-  source_security_group_id = module.eks.node_security_group_id
-  to_port           = 3306
-  type              = "ingress"
-}
-
-#############################################
-### Bastion Host EC2
-#############################################
-
-module "bastion_ec2" {
-  depends_on   = [module.bastion_sg]
-  source       = "./modules/bastion"
-  ami_id       = data.aws_ami.ami_id.id                    # amazon-linux-2
-  subnet_id    = local.public_subnet_ids[0]
-  vpc_id       = module.vpc.vpc_id
-  sg_ids   = ["${module.bastion_sg.bastion_sg_id}"]
-  keypair_name = "${local.cluster_name}_BastionHost"
-  user_data    = data.template_file.bastion_user_data.rendered
-}
-
-module "bastion_sg" {
-  depends_on            = [module.eks]
-  source                = "./modules/bastion_security_group"
-  vpc_id                = module.vpc.vpc_id
+module "alb-acm" { # alb 를 위한 인증서
+  source            = "./modules/acm"
+  domain_name       = "*.hairpin.today"
+  route53_host_zone = data.aws_route53_zone.route53_hosting_zone.zone_id
 }
