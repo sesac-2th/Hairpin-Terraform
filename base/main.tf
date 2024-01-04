@@ -15,7 +15,7 @@ module "subnet" {
   private_subnet_count = local.private_subnet_count
   public_subnet_cidr   = flatten([for i in range(local.public_subnet_count) : [cidrsubnet(module.vpc.vpc_cidr, 3, count.index * 3)]])
   private_subnet_cidr  = flatten([for i in range(local.private_subnet_count) : [cidrsubnet(module.vpc.vpc_cidr, 3, count.index * 3 + i + 1)]])
-  subnet_az            = data.aws_availability_zones.available.names[count.index]
+  subnet_az            = count.index * 3 - 1 >= 0 ? data.aws_availability_zones.available.names[count.index * 3 - 1] : data.aws_availability_zones.available.names[0]
   cluster_name         = local.cluster_name
 }
 

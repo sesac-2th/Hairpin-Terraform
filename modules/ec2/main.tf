@@ -1,6 +1,6 @@
 resource "aws_instance" "ec2" {
   ami                         = var.ami_id
-  instance_type               = "t2.small"
+  instance_type               = var.instance_type
   subnet_id                   = var.subnet_id
   key_name                    = aws_key_pair.ec2_keypair.key_name
   vpc_security_group_ids      = var.ec2_sg_ids

@@ -27,6 +27,10 @@ module "eks" {
       most_recent              = true
       service_account_role_arn = module.efs_role.iam_role_arn
     }
+
+    amazon-cloudwatch-observability = {
+      most_recent = true
+    }
   }
 
 

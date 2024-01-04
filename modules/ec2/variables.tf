@@ -20,3 +20,7 @@ variable "subnet_id" {
 variable "keyfile_path" {
 
 }
+
+variable "instance_type" {
+
+}

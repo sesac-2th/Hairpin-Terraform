@@ -1,5 +1,5 @@
 locals {
-  region            = "ap-northeast-1"
+  region            = "ap-northeast-2"
   public_subnet_ids = data.aws_subnets.public_subnet_ids.ids
 }
 
