@@ -208,7 +208,8 @@ module "efs" {
 module "efs_storage_class" {
   source = "./modules/eks/storageclass"
   depends_on = [
-    module.efs
+    module.efs,
+    aws_network_interface_sg_attachment.sg_attachment
   ]
   efs_name = "jenkins-efs-pv"
 
